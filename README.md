@@ -17,7 +17,10 @@ Découvrez les micro-intentions cachées dans votre trafic Google Search Console
 ### Prérequis
 
 - Node.js 18+ installé
-- Une clé API Anthropic → [Obtenez-la ici](https://console.anthropic.com/)
+- Une clé API d'un des providers suivants :
+  - **Anthropic (Claude)** → [Obtenez-la ici](https://console.anthropic.com/)
+  - **OpenAI (GPT)** → [Obtenez-la ici](https://platform.openai.com/api-keys)
+  - **Google (Gemini)** → [Obtenez-la ici](https://makersuite.google.com/app/apikey)
 
 ### Étapes
 
@@ -39,7 +42,7 @@ npm run dev
 
 4. **Ouvrir http://localhost:3000**
 
-5. **Entrer votre clé API** dans l'interface (elle sera sauvegardée dans votre navigateur)
+5. **Choisir votre provider IA** et **entrer votre clé API** dans l'interface (elle sera sauvegardée dans votre navigateur)
 
 ## 📦 Déploiement sur Vercel (RECOMMANDÉ)
 
@@ -113,6 +116,8 @@ Suivez les instructions.
    - Exportez en CSV
 
 2. **Uploadez dans l'outil**
+   - Choisissez votre provider IA (Anthropic, OpenAI ou Gemini)
+   - Entrez votre clé API
    - Entrez votre marque (optionnel)
    - Entrez votre secteur (optionnel)
    - Uploadez le CSV
@@ -153,14 +158,19 @@ gsc-intention-analyzer/
 - Visualisations avec Recharts (PieChart, Matrice)
 
 ### Backend (Next.js API Routes)
-- Endpoint `/api/analyze` pour appels Claude
-- Classification avec claude-3-5-sonnet-20241022
+- Endpoint `/api/analyze` pour appels IA multi-providers
+- Support de 3 modèles :
+  - **Claude Sonnet 4.5** (Anthropic)
+  - **GPT-4o** (OpenAI)
+  - **Gemini 2.0 Flash Exp** (Google)
 - Prompt optimisé pour découverte dynamique d'intentions
 
 ### Sécurité
-- Clé API stockée côté serveur uniquement
-- Validation des données d'entrée
+- Clé API stockée uniquement dans le navigateur de l'utilisateur (localStorage)
+- Validation des données d'entrée côté serveur
+- Validation du format de clé API par provider
 - Pas de stockage de données utilisateur
+- Code 100% open-source et auditable
 
 ## 🐛 Bugs corrigés (par rapport à la version initiale)
 
