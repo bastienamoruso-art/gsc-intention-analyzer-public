@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
+type AIProvider = 'anthropic' | 'openai' | 'gemini';
 
 export async function POST(request: NextRequest) {
   try {
-    const { queries, brand, sector, apiKey } = await request.json();
+    const { queries, brand, sector, apiKey, provider } = await request.json();
 
     if (!queries || !Array.isArray(queries)) {
       return NextResponse.json(
@@ -12,17 +16,41 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!apiKey || typeof apiKey !== 'string' || !apiKey.startsWith('sk-ant-')) {
+    if (!provider || !['anthropic', 'openai', 'gemini'].includes(provider)) {
       return NextResponse.json(
-        { error: 'Invalid or missing Anthropic API key' },
+        { error: 'Invalid or missing provider' },
         { status: 400 }
       );
     }
 
-    // Créer une instance Anthropic avec la clé de l'utilisateur
-    const anthropic = new Anthropic({
-      apiKey: apiKey,
-    });
+    if (!apiKey || typeof apiKey !== 'string') {
+      return NextResponse.json(
+        { error: 'Invalid or missing API key' },
+        { status: 400 }
+      );
+    }
+
+    // Validation spécifique par provider
+    if (provider === 'anthropic' && !apiKey.startsWith('sk-ant-')) {
+      return NextResponse.json(
+        { error: 'Invalid Anthropic API key format' },
+        { status: 400 }
+      );
+    }
+
+    if (provider === 'openai' && !apiKey.startsWith('sk-')) {
+      return NextResponse.json(
+        { error: 'Invalid OpenAI API key format' },
+        { status: 400 }
+      );
+    }
+
+    if (provider === 'gemini' && !apiKey.startsWith('AI')) {
+      return NextResponse.json(
+        { error: 'Invalid Gemini API key format' },
+        { status: 400 }
+      );
+    }
 
     // Préparer les données pour l'analyse
     const queryData = queries.map(q => ({
@@ -103,25 +131,61 @@ FORMAT JSON STRICT :
   }
 }`;
 
-    const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5',
-      max_tokens: 4096,
-      messages: [
-        {
-          role: 'user',
-          content: prompt
-        }
-      ]
-    });
+    // Appeler l'API selon le provider
+    let responseText: string;
 
-    // Extraire le contenu de la réponse
-    const content = message.content[0];
-    if (content.type !== 'text') {
-      throw new Error('Unexpected response type');
+    switch (provider as AIProvider) {
+      case 'anthropic': {
+        const anthropic = new Anthropic({ apiKey });
+        const message = await anthropic.messages.create({
+          model: 'claude-sonnet-4-5',
+          max_tokens: 4096,
+          messages: [{ role: 'user', content: prompt }]
+        });
+
+        const content = message.content[0];
+        if (content.type !== 'text') {
+          throw new Error('Unexpected Anthropic response type');
+        }
+        responseText = content.text;
+        break;
+      }
+
+      case 'openai': {
+        const openai = new OpenAI({ apiKey });
+        const completion = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 4096,
+          response_format: { type: 'text' }
+        });
+
+        responseText = completion.choices[0]?.message?.content || '';
+        if (!responseText) {
+          throw new Error('Empty OpenAI response');
+        }
+        break;
+      }
+
+      case 'gemini': {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        responseText = response.text();
+
+        if (!responseText) {
+          throw new Error('Empty Gemini response');
+        }
+        break;
+      }
+
+      default:
+        throw new Error(`Unsupported provider: ${provider}`);
     }
 
     // Parser le JSON de la réponse
-    const jsonMatch = content.text.match(/\{[\s\S]*\}/);
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       throw new Error('No JSON found in response');
     }

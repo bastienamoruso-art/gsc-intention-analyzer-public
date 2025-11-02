@@ -44,10 +44,13 @@ interface Analysis {
 
 const COLORS = ['#f7c724', '#0edd89', '#27f6c5', '#c526f6', '#27bef7', '#fdf13e', '#f142fd'];
 
+type AIProvider = 'anthropic' | 'openai' | 'gemini';
+
 export default function GSCIntentionAnalyzer() {
   const [step, setStep] = useState<number>(1);
   const [brand, setBrand] = useState<string>('');
   const [sector, setSector] = useState<string>('');
+  const [provider, setProvider] = useState<AIProvider>('anthropic');
   const [apiKey, setApiKey] = useState<string>('');
   const [queries, setQueries] = useState<QueryData[]>([]);
   const [classifiedQueries, setClassifiedQueries] = useState<QueryData[]>([]);
@@ -57,21 +60,61 @@ export default function GSCIntentionAnalyzer() {
   const [selectedCell, setSelectedCell] = useState<{ intention: string; posGroup: string; queries: QueryData[] } | null>(null);
   const [expandedIntention, setExpandedIntention] = useState<string | null>(null);
 
-  // Charger la clé API depuis localStorage au démarrage
+  // Charger provider et clé API depuis localStorage au démarrage
   React.useEffect(() => {
-    const savedApiKey = localStorage.getItem('anthropic_api_key');
+    const savedProvider = localStorage.getItem('ai_provider') as AIProvider;
+    const savedApiKey = localStorage.getItem('ai_api_key');
+    if (savedProvider) {
+      setProvider(savedProvider);
+    }
     if (savedApiKey) {
       setApiKey(savedApiKey);
     }
   }, []);
 
+  // Sauvegarder le provider dans localStorage
+  const handleProviderChange = (value: AIProvider) => {
+    setProvider(value);
+    localStorage.setItem('ai_provider', value);
+    // Réinitialiser la clé API quand on change de provider
+    setApiKey('');
+    localStorage.removeItem('ai_api_key');
+  };
+
   // Sauvegarder la clé API dans localStorage quand elle change
   const handleApiKeyChange = (value: string) => {
     setApiKey(value);
     if (value.trim()) {
-      localStorage.setItem('anthropic_api_key', value.trim());
+      localStorage.setItem('ai_api_key', value.trim());
     } else {
-      localStorage.removeItem('anthropic_api_key');
+      localStorage.removeItem('ai_api_key');
+    }
+  };
+
+  // Obtenir le placeholder et la validation selon le provider
+  const getApiKeyInfo = () => {
+    switch (provider) {
+      case 'anthropic':
+        return {
+          placeholder: 'sk-ant-api03-...',
+          validation: (key: string) => key.startsWith('sk-ant-'),
+          link: 'https://console.anthropic.com/',
+          name: 'Anthropic (Claude)'
+        };
+      case 'openai':
+        return {
+          placeholder: 'sk-...',
+          validation: (key: string) => key.startsWith('sk-') && !key.startsWith('sk-ant-'),
+          link: 'https://platform.openai.com/api-keys',
+          name: 'OpenAI (GPT)'
+        };
+      case 'gemini':
+        return {
+          placeholder: 'AI...',
+          validation: (key: string) => key.startsWith('AI'),
+          link: 'https://makersuite.google.com/app/apikey',
+          name: 'Google (Gemini)'
+        };
     }
   };
 
@@ -142,8 +185,8 @@ export default function GSCIntentionAnalyzer() {
       return;
     }
 
-    if (!apiKey || !apiKey.startsWith('sk-ant-')) {
-      setError('⚠️ Veuillez entrer une clé API Anthropic valide');
+    if (!apiKey || !getApiKeyInfo().validation(apiKey)) {
+      setError(`⚠️ Veuillez entrer une clé API ${getApiKeyInfo().name} valide`);
       return;
     }
 
@@ -154,7 +197,7 @@ export default function GSCIntentionAnalyzer() {
       const response = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ queries, brand, sector, apiKey })
+        body: JSON.stringify({ queries, brand, sector, apiKey, provider })
       });
 
       if (!response.ok) {
@@ -452,26 +495,51 @@ export default function GSCIntentionAnalyzer() {
 
             <div style={{ marginBottom: '20px' }}>
               <label style={{ ...styles.text, display: 'block', marginBottom: '8px', fontWeight: 500 }}>
-                🔑 Clé API Anthropic <span style={{ color: '#f7c724' }}>*</span>
+                🤖 Provider IA <span style={{ color: '#f7c724' }}>*</span>
               </label>
-              <input
-                type="password"
-                value={apiKey}
-                onChange={(e) => handleApiKeyChange(e.target.value)}
-                placeholder="sk-ant-api03-..."
+              <select
+                value={provider}
+                onChange={(e) => handleProviderChange(e.target.value as AIProvider)}
                 style={{
                   ...styles.text,
                   width: '100%',
                   padding: '12px',
                   background: '#0a0a0a',
-                  border: apiKey ? '1px solid #2a5a3a' : '1px solid #5a2a2a',
+                  border: '1px solid #333',
+                  borderRadius: '6px',
+                  color: '#fff',
+                  fontSize: '14px',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="anthropic">Anthropic (Claude)</option>
+                <option value="openai">OpenAI (GPT)</option>
+                <option value="gemini">Google (Gemini)</option>
+              </select>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ ...styles.text, display: 'block', marginBottom: '8px', fontWeight: 500 }}>
+                🔑 Clé API {getApiKeyInfo().name} <span style={{ color: '#f7c724' }}>*</span>
+              </label>
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(e) => handleApiKeyChange(e.target.value)}
+                placeholder={getApiKeyInfo().placeholder}
+                style={{
+                  ...styles.text,
+                  width: '100%',
+                  padding: '12px',
+                  background: '#0a0a0a',
+                  border: apiKey && getApiKeyInfo().validation(apiKey) ? '1px solid #2a5a3a' : '1px solid #5a2a2a',
                   borderRadius: '6px',
                   color: '#fff',
                   fontSize: '14px'
                 }}
               />
               <p style={{ ...styles.text, fontSize: '12px', color: '#666', marginTop: '8px' }}>
-                🔒 Votre clé reste sur votre navigateur. <a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#f7c724', textDecoration: 'none' }}>Obtenez votre clé ici</a>
+                🔒 Votre clé reste sur votre navigateur. <a href={getApiKeyInfo().link} target="_blank" rel="noopener noreferrer" style={{ color: '#f7c724', textDecoration: 'none' }}>Obtenez votre clé ici</a>
               </p>
             </div>
 
